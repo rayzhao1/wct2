@@ -23,7 +23,7 @@ The code was written by [Jaejun Yoo](https://github.com/jaejun-yoo) and [Byeongk
 - PyTorch >= 0.4.1
 - Check the requirements.txt
 ```bash
-pip install -r requirements.txt
+pip install --no-cache-dir -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
 ```
 ### Installation
 - Clone this repo:
@@ -41,9 +41,6 @@ cd WCT2
     - Currently there are several example images so that you can execute the code as soon as you clone this repo.  
 - Finally, test the model:
 ```bash
-
-$ pip install --no-cache-dir -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
-
 python transfer.py --option_unpool cat5 -a --content ./examples/content --style ./examples/style --content_segment ./examples/content_segment --style_segment ./examples/style_segment/ --output ./outputs/ --verbose --image_size 512 
 ```
 
