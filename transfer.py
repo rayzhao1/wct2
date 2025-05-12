@@ -247,8 +247,21 @@ def run_bulk(config):
                 fname_output = _output.replace(ext, '_{}_{}.{}'.format(config.option_unpool, postfix, ext))
                 print('------ transfer:', _output)
                 wct2 = WCT2(transfer_at=transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose)
+                
+                #with torch.no_grad():
+                    #img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
+        
+                wct2 = WCT2(transfer_at=transfer_at,
+                    option_unpool=config.option_unpool,
+                    device=device,
+                    verbose=config.verbose)
+
                 with torch.no_grad():
-                    img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
+                    if config.suppress_style:
+                        img = wct2.compress_structure_only(content, alpha=config.alpha)
+                    else:
+                        img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
+
                 save_image(img.clamp_(0, 1), fname_output, padding=0)
         else:
             for _transfer_at in get_all_transfer():
@@ -278,6 +291,8 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--transfer_all', action='store_true')
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--suppress_style', action='store_true',
+                    help='Run LL-only structural compression (no style transfer)')
     config = parser.parse_args()
 
     print(config)
