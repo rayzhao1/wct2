@@ -3,10 +3,9 @@ import argparse
 import os
 import torch
 import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
 
 
-def add_noise(image, loc = 0, scale = 1):
+def add_gaussian_noise(image, loc = 0, scale = 1):
     noise = np.random.normal(loc = loc, scale = scale, size = image.shape)
     noised_signal = image + noise.astype(int)
     noised_signal = np.clip(noised_signal, 0.0, 1.0)
@@ -32,7 +31,7 @@ def noise_images(config):
         full_dir = os.path.join(config.images, image_dir)
         image = mpimg.imread(full_dir)
         
-        noised_image = add_noise(image = image)
+        noised_image = add_gaussian_noise(image = image)
         noised_path = os.path.join(config.desired_dir, image_dir)
         mpimg.imsave(noised_path, noised_image)
         
