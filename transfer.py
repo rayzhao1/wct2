@@ -47,11 +47,10 @@ class WCT2:
     def __init__(self, model_path='./model_checkpoints', transfer_at=['encoder', 'skip', 'decoder'], option_unpool='cat5', suppress_style=False, device='cuda:0', verbose=False):
 
         self.transfer_at = set(transfer_at)
+        self.suppress_style = suppress_style
         assert not(self.transfer_at - set(['encoder', 'decoder', 'skip'])), 'invalid transfer_at: {}'.format(transfer_at)
         if not self.transfer_at and not self.suppress_style:
             raise ValueError('Empty transfer_at and suppress_style=False. Either enable transfer or enable suppression mode.')
-
-        self.suppress_style = suppress_style
         self.device = torch.device(device)
         self.verbose = verbose
         self.encoder = WaveEncoder(option_unpool).to(self.device)
