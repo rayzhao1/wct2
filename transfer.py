@@ -60,6 +60,81 @@ class WCT2:
     def print_(self, msg):
         if self.verbose:
             print(msg)
+    
+    def compress_structure_only(image_tensor, encoder, decoder, alpha=1.0):
+        """
+        Compresses an image by preserving only the LL (low-frequency) component
+        and suppressing high-frequency (LH, HL, HH) components during reconstruction.
+
+        Args:
+            image_tensor (torch.Tensor): Input image tensor (1, 3, H, W).
+            encoder (WaveEncoder): The pretrained WaveEncoder model.
+            decoder (WaveDecoder): The pretrained WaveDecoder model.
+            alpha (float): Blending factor for high-frequency skips.
+                        1.0 means completely zero out high-frequency skips.
+                        0.0 means keep original high-frequency skips (standard reconstruction).
+
+        Returns:
+            torch.Tensor: The reconstructed image tensor (1, 3, H, W).
+        """
+        skips = {}
+        feat = image_tensor
+
+        # Encode the image and collect skips
+        # The encoder's encode method processes level by level and populates the skips dictionary
+        # The final 'feat' will be the LL component at the deepest level (after pool3)
+        for level in [1, 2, 3, 4]:
+            feat = encoder.encode(feat, skips, level)
+
+        # Zero out the high-frequency content in skip connections based on alpha
+        # The skips dictionary contains entries like 'pool1': [LH, HL, HH], 'pool2': [LH, HL, HH], etc.
+        # and also original conv outputs like 'conv1_2', 'conv2_2', 'conv3_4' if using 'cat5' unpooling.
+        # We only want to zero out the LH, HL, HH components from the WavePool layers.
+        skip_pool_levels = ['pool1', 'pool2', 'pool3']
+        for skip_level in skip_pool_levels:
+            if skip_level in skips:
+                # skips[skip_level] is a list [LH, HL, HH]
+                for i in range(3): # Iterate through LH (0), HL (1), HH (2) components
+                    original_skip = skips[skip_level][i]
+                    # Blend the original skip with zeros based on alpha
+                    skips[skip_level][i] = (1 - alpha) * original_skip + alpha * torch.zeros_like(original_skip)
+
+        # Decode the image using the final LL feature and the modified skips
+        # The decoder's decode method processes level by level in reverse
+        output = decoder(feat, skips)
+
+        return output
+
+    def compress_structure_only(self, content, alpha=1.0):
+        """
+        Uses pretrained WCT2 model to reconstruct the image using only LL bands
+        (i.e., low-frequency structural information). All high-frequency detail
+        from skip connections is suppressed.
+
+        Args:
+        content (torch.Tensor): image tensor (1, 3, H, W)
+        alpha (float): optional blend between full and zeroed skips (1.0 = zero skip = maximum suppression)
+
+        Returns:
+            output image tensor (1, 3, H, W)
+        """
+        skips = {}
+        feat = content
+
+        # Encoder: gather skips, then zero out high-freq skips
+        for level in [1, 2, 3, 4]:
+            feat = self.encode(feat, skips, level)
+
+        # Zero out the high-frequency content in skip connections
+        for skip_level in ['pool1', 'pool2', 'pool3']:
+            if skip_level in skips:
+                for i in range(3):  # LH, HL, HH
+                    original = skips[skip_level][i]
+                    skips[skip_level][i] = (1 - alpha) * original + alpha * torch.zeros_like(original)
+
+        # Decode the image (reconstruct from LL and cleared skips)
+        output = self.decoder(feat, skips)
+        return output
 
     def encode(self, x, skips, level):
         return self.encoder.encode(x, skips, level)

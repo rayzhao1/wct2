@@ -26,44 +26,65 @@ import numpy as np
 
 
 def get_wav(in_channels, pool=True):
-    """wavelet decomposition using conv2d"""
-    harr_wav_L = 1 / np.sqrt(2) * np.ones((1, 2))
-    harr_wav_H = 1 / np.sqrt(2) * np.ones((1, 2))
-    harr_wav_H[0, 0] = -1 * harr_wav_H[0, 0]
+    """
+    Create fixed (non-learnable) Haar wavelet filters implemented as grouped 2D convolutions.
 
-    harr_wav_LL = np.transpose(harr_wav_L) * harr_wav_L
-    harr_wav_LH = np.transpose(harr_wav_L) * harr_wav_H
-    harr_wav_HL = np.transpose(harr_wav_H) * harr_wav_L
-    harr_wav_HH = np.transpose(harr_wav_H) * harr_wav_H
+    This function returns four convolutional layers (LL, LH, HL, HH), each performing a
+    different part of a 2D Haar wavelet decomposition or its inverse, depending on the 'pool' flag.
 
+    If pool=True:
+        - Each filter performs a wavelet decomposition (downsampling by 2).
+        - Output is 4 tensors: low-frequency (LL) and directional high-frequency bands (LH, HL, HH).
+
+    If pool=False:
+        - Each filter performs a wavelet reconstruction (upsampling by 2).
+        - Used in the decoder to invert the wavelet transform.
+
+    Parameters:
+        in_channels (int): Number of input feature channels. Each channel is processed independently.
+        pool (bool): True = forward (decompose); False = inverse (reconstruct).
+
+    Returns:
+        LL, LH, HL, HH: 2D convolutional modules (Conv2d or ConvTranspose2d), fixed weights.
+    """
+
+    # Haar wavelet low-pass and high-pass 1D filters
+    harr_wav_L = 1 / np.sqrt(2) * np.ones((1, 2))         # [ +1, +1 ] / sqrt(2)
+    harr_wav_H = 1 / np.sqrt(2) * np.ones((1, 2))         # [ -1, +1 ] / sqrt(2)
+    harr_wav_H[0, 0] *= -1                                # make first value negative
+
+    # Create 2D filters via outer product of 1D filters
+    # These define the separable 2D Haar wavelet filters
+    harr_wav_LL = np.transpose(harr_wav_L) * harr_wav_L   # smooth (low-low)
+    harr_wav_LH = np.transpose(harr_wav_L) * harr_wav_H   # vertical edge (low-high)
+    harr_wav_HL = np.transpose(harr_wav_H) * harr_wav_L   # horizontal edge (high-low)
+    harr_wav_HH = np.transpose(harr_wav_H) * harr_wav_H   # diagonal detail (high-high)
+
+    # Convert numpy filters to PyTorch tensors with shape (1, 1, 2, 2)
     filter_LL = torch.from_numpy(harr_wav_LL).unsqueeze(0)
     filter_LH = torch.from_numpy(harr_wav_LH).unsqueeze(0)
     filter_HL = torch.from_numpy(harr_wav_HL).unsqueeze(0)
     filter_HH = torch.from_numpy(harr_wav_HH).unsqueeze(0)
 
-    if pool:
-        net = nn.Conv2d
-    else:
-        net = nn.ConvTranspose2d
+    # Choose between downsampling (Conv2d) or upsampling (ConvTranspose2d)
+    net = nn.Conv2d if pool else nn.ConvTranspose2d
 
-    LL = net(in_channels, in_channels,
-             kernel_size=2, stride=2, padding=0, bias=False,
-             groups=in_channels)
-    LH = net(in_channels, in_channels,
-             kernel_size=2, stride=2, padding=0, bias=False,
-             groups=in_channels)
-    HL = net(in_channels, in_channels,
-             kernel_size=2, stride=2, padding=0, bias=False,
-             groups=in_channels)
-    HH = net(in_channels, in_channels,
-             kernel_size=2, stride=2, padding=0, bias=False,
-             groups=in_channels)
+    # Create depthwise (grouped) convs so each channel is processed independently
+    # Kernel size 2, stride 2 => downsampling or upsampling by factor of 2
+    LL = net(in_channels, in_channels, kernel_size=2, stride=2, padding=0,
+             bias=False, groups=in_channels)
+    LH = net(in_channels, in_channels, kernel_size=2, stride=2, padding=0,
+             bias=False, groups=in_channels)
+    HL = net(in_channels, in_channels, kernel_size=2, stride=2, padding=0,
+             bias=False, groups=in_channels)
+    HH = net(in_channels, in_channels, kernel_size=2, stride=2, padding=0,
+             bias=False, groups=in_channels)
 
-    LL.weight.requires_grad = False
-    LH.weight.requires_grad = False
-    HL.weight.requires_grad = False
-    HH.weight.requires_grad = False
+    # Freeze the filters so they are not trainable
+    for layer in [LL, LH, HL, HH]:
+        layer.weight.requires_grad = False
 
+    # Initialize each filter's weights with the corresponding 2D wavelet kernel
     with torch.no_grad():
         LL.weight.copy_(filter_LL.float().unsqueeze(0).repeat(in_channels, 1, 1, 1).clone())
         LH.weight.copy_(filter_LH.float().unsqueeze(0).repeat(in_channels, 1, 1, 1).clone())
@@ -71,6 +92,7 @@ def get_wav(in_channels, pool=True):
         HH.weight.copy_(filter_HH.float().unsqueeze(0).repeat(in_channels, 1, 1, 1).clone())
 
     return LL, LH, HL, HH
+
 
 
 class WavePool(nn.Module):
