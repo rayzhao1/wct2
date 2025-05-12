@@ -44,12 +44,14 @@ def is_image_file(filename):
 
 
 class WCT2:
-    def __init__(self, model_path='./model_checkpoints', transfer_at=['encoder', 'skip', 'decoder'], option_unpool='cat5', device='cuda:0', verbose=False):
+    def __init__(self, model_path='./model_checkpoints', transfer_at=['encoder', 'skip', 'decoder'], option_unpool='cat5', suppress_style=False, device='cuda:0', verbose=False):
 
         self.transfer_at = set(transfer_at)
         assert not(self.transfer_at - set(['encoder', 'decoder', 'skip'])), 'invalid transfer_at: {}'.format(transfer_at)
-        assert self.transfer_at, 'empty transfer_at'
+        if not self.transfer_at and not self.suppress_style:
+            raise ValueError('Empty transfer_at and suppress_style=False. Either enable transfer or enable suppression mode.')
 
+        self.suppress_style = suppress_style
         self.device = torch.device(device)
         self.verbose = verbose
         self.encoder = WaveEncoder(option_unpool).to(self.device)
@@ -209,7 +211,7 @@ def get_all_transfer():
 def run_bulk(config):
     device = 'cpu' if config.cpu or not torch.cuda.is_available() else 'cuda:0'
     device = torch.device(device)
-
+    
     transfer_at = set()
     if config.transfer_at_encoder:
         transfer_at.add('encoder')
@@ -246,7 +248,7 @@ def run_bulk(config):
                 postfix = '_'.join(sorted(list(transfer_at)))
                 fname_output = _output.replace(ext, '_{}_{}.{}'.format(config.option_unpool, postfix, ext))
                 print('------ transfer:', _output)
-                wct2 = WCT2(transfer_at=transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose)
+                wct2 = WCT2(transfer_at=transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose, suppress_style=config.suppress_style)
                 
                 #with torch.no_grad():
                     #img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
@@ -254,7 +256,9 @@ def run_bulk(config):
                 wct2 = WCT2(transfer_at=transfer_at,
                     option_unpool=config.option_unpool,
                     device=device,
-                    verbose=config.verbose)
+                    verbose=config.verbose,
+                    suppress_style=config.suppress_style
+                )
 
                 with torch.no_grad():
                     if config.suppress_style:
@@ -269,7 +273,7 @@ def run_bulk(config):
                     postfix = '_'.join(sorted(list(_transfer_at)))
                     fname_output = _output.replace(ext, '_{}_{}.{}'.format(config.option_unpool, postfix, ext))
                     print('------ transfer:', fname)
-                    wct2 = WCT2(transfer_at=_transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose)
+                    wct2 = WCT2(transfer_at=_transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose, suppress_style=config.suppress_style)
                     with torch.no_grad():
                         img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
                     save_image(img.clamp_(0, 1), fname_output, padding=0)
