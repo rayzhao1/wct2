@@ -203,12 +203,10 @@ def run_bulk(config):
                 postfix = '_'.join(sorted(list(transfer_at)))
                 fname_output = _output.replace(ext, '_{}_{}.{}'.format(config.option_unpool, postfix, ext))
                 print('------ transfer:', _output)
-                wct2 = WCT2(transfer_at=transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose, suppress_style=config.suppress_style)
-                
-                #with torch.no_grad():
-                    #img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
+            
         
-                wct2 = WCT2(transfer_at=transfer_at,
+                wct2 = WCT2(
+                    transfer_at=transfer_at,
                     option_unpool=config.option_unpool,
                     device=device,
                     verbose=config.verbose,
@@ -222,17 +220,46 @@ def run_bulk(config):
                         img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
 
                 save_image(img.clamp_(0, 1), fname_output, padding=0)
+            # Then: style suppression / compress_structure_only
+            with Timer('Elapsed time (suppress): {}', config.verbose):
+                fname_suppress = _output.replace(ext, '_{}_{}_suppress.{}'.format(config.option_unpool, postfix, ext))
+                print('------ suppress:', fname_suppress)
+
+                wct2_suppress = WCT2(
+                    transfer_at=transfer_at,
+                    option_unpool=config.option_unpool,
+                    device=device,
+                    verbose=config.verbose,
+                )
+
+                with torch.no_grad():
+                    img_suppress = wct2_suppress.compress_structure_only(content, alpha=config.alpha)
+
+                save_image(img_suppress.clamp_(0, 1), fname_suppress, padding=0)
         else:
             for _transfer_at in get_all_transfer():
                 with Timer('Elapsed time in whole WCT: {}', config.verbose):
                     postfix = '_'.join(sorted(list(_transfer_at)))
                     fname_output = _output.replace(ext, '_{}_{}.{}'.format(config.option_unpool, postfix, ext))
                     print('------ transfer:', fname)
-                    wct2 = WCT2(transfer_at=_transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose, suppress_style=config.suppress_style)
+                    wct2 = WCT2(transfer_at=_transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose, suppress_style=False)
                     with torch.no_grad():
                         img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
                     save_image(img.clamp_(0, 1), fname_output, padding=0)
-
+                    # Now add suppression pass (run once per image)
+            with Timer('Elapsed time in suppression pass: {}', config.verbose):
+                suppress_output = _output.replace(ext, '-suppress.{}'.format(ext))
+                print('------ suppression:', fname)
+                wct2 = WCT2(
+                    transfer_at=set(),  # or whatever is appropriate — maybe just 'encoder'?
+                    option_unpool=config.option_unpool,
+                    device=device,
+                    verbose=config.verbose,
+                    suppress_style=True
+                )
+                with torch.no_grad():
+                    img = wct2.compress_structure_only(content, alpha=config.alpha)
+                save_image(img.clamp_(0, 1), suppress_output, padding=0)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
