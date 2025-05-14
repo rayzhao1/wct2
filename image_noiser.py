@@ -6,7 +6,7 @@ import matplotlib.image as mpimg
 
 
 def add_gaussian_noise(image, loc = 0, scale = 1):
-    noise = np.random.normal(loc = loc, scale = scale, size = image.shape)
+    noise = 0.75 * np.random.normal(loc = loc, scale = scale, size = image.shape)
     noised_signal = image + noise.astype(int)
     noised_signal = np.clip(noised_signal, 0.0, 1.0)
     return noised_signal
