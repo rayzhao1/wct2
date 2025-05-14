@@ -1,0 +1,3 @@
+# supplemental requirements.txt
+
+bm3d
