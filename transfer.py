@@ -44,13 +44,10 @@ def is_image_file(filename):
 
 
 class WCT2:
-    def __init__(self, model_path='./model_checkpoints', transfer_at=['encoder', 'skip', 'decoder'], option_unpool='cat5', suppress_style=False, device='cuda:0', verbose=False):
+    def __init__(self, model_path='./model_checkpoints', transfer_at=['encoder', 'skip', 'decoder'], option_unpool='cat5', device='cuda:0', verbose=False):
 
         self.transfer_at = set(transfer_at)
-        self.suppress_style = suppress_style
         assert not(self.transfer_at - set(['encoder', 'decoder', 'skip'])), 'invalid transfer_at: {}'.format(transfer_at)
-        if not self.transfer_at and not self.suppress_style:
-            raise ValueError('Empty transfer_at and suppress_style=False. Either enable transfer or enable suppression mode.')
         self.device = torch.device(device)
         self.verbose = verbose
         self.encoder = WaveEncoder(option_unpool).to(self.device)
@@ -87,7 +84,7 @@ class WCT2:
             if skip_level in skips:
                 for i in range(3):  # LH, HL, HH
                     original = skips[skip_level][i]
-                    skips[skip_level][i] = (1 - alpha) * original + alpha * torch.zeros_like(original)
+                    skips[skip_level][i] = 0
 
         # Decode the image (reconstruct from LL and cleared skips)
         output = self.decoder(feat, skips)
@@ -176,16 +173,13 @@ def run_bulk(config):
         transfer_at.add('skip')
 
     # The filenames of the content and style pair should match
-    fnames = set(os.listdir(config.content)) & set(os.listdir(config.style))
-
-    if config.content_segment and config.style_segment:
-        fnames &= set(os.listdir(config.content_segment))
-        fnames &= set(os.listdir(config.style_segment))
+    fnames = set(os.listdir(config.content)) #  & set(os.listdir(config.style))
 
     for fname in tqdm.tqdm(fnames):
         if not is_image_file(fname):
             print('invalid file (is not image), ', fname)
             continue
+        
         _content = os.path.join(config.content, fname)
         _style = os.path.join(config.style, fname)
         _content_segment = os.path.join(config.content_segment, fname) if config.content_segment else None
@@ -193,9 +187,9 @@ def run_bulk(config):
         _output = os.path.join(config.output, fname)
 
         content = open_image(_content, config.image_size).to(device)
-        style = open_image(_style, config.image_size).to(device)
-        content_segment = load_segment(_content_segment, config.image_size)
-        style_segment = load_segment(_style_segment, config.image_size)     
+        style = open_image(_style, config.image_size).to(device) if os.path.exists(_content) else None
+        content_segment = load_segment(_content_segment, config.image_size) if os.path.exists(content_segment) else None
+        style_segment = load_segment(_style_segment, config.image_size) if os.path.exists(_style_segment) else None 
         _, ext = os.path.splitext(fname)
         
         if not config.transfer_all:
@@ -210,14 +204,10 @@ def run_bulk(config):
                     option_unpool=config.option_unpool,
                     device=device,
                     verbose=config.verbose,
-                    suppress_style=config.suppress_style
                 )
 
                 with torch.no_grad():
-                    if config.suppress_style:
-                        img = wct2.compress_structure_only(content, alpha=config.alpha)
-                    else:
-                        img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
+                    img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
 
                 save_image(img.clamp_(0, 1), fname_output, padding=0)
             # Then: style suppression / compress_structure_only
@@ -237,29 +227,31 @@ def run_bulk(config):
 
                 save_image(img_suppress.clamp_(0, 1), fname_suppress, padding=0)
         else:
-            for _transfer_at in get_all_transfer():
-                with Timer('Elapsed time in whole WCT: {}', config.verbose):
-                    postfix = '_'.join(sorted(list(_transfer_at)))
-                    fname_output = _output.replace(ext, '_{}_{}.{}'.format(config.option_unpool, postfix, ext))
-                    print('------ transfer:', fname)
-                    wct2 = WCT2(transfer_at=_transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose, suppress_style=False)
+            # Suppression mode requires only content image
+            if (content and not style and not content_segment and not style_segment):
+                with Timer('Elapsed time in suppression pass: {}', config.verbose):
+                    suppress_output = _output.replace(ext, '-suppress.{}'.format(ext))
+                    print('------ suppression:', fname)
+                    wct2 = WCT2(
+                        transfer_at=set(),  # or whatever is appropriate — maybe just 'encoder'?
+                        option_unpool=config.option_unpool,
+                        device=device,
+                        verbose=config.verbose,
+                    )
                     with torch.no_grad():
-                        img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
-                    save_image(img.clamp_(0, 1), fname_output, padding=0)
-                    # Now add suppression pass (run once per image)
-            with Timer('Elapsed time in suppression pass: {}', config.verbose):
-                suppress_output = _output.replace(ext, '-suppress.{}'.format(ext))
-                print('------ suppression:', fname)
-                wct2 = WCT2(
-                    transfer_at=set(),  # or whatever is appropriate — maybe just 'encoder'?
-                    option_unpool=config.option_unpool,
-                    device=device,
-                    verbose=config.verbose,
-                    suppress_style=True
-                )
-                with torch.no_grad():
-                    img = wct2.compress_structure_only(content, alpha=config.alpha)
-                save_image(img.clamp_(0, 1), suppress_output, padding=0)
+                        img = wct2.compress_structure_only(content, alpha=config.alpha)
+                    save_image(img.clamp_(0, 1), suppress_output, padding=0)
+            else:
+                assert content and style and content_segment and style_segment, 'Must provide all of content/style + respective segments'
+                for _transfer_at in get_all_transfer():
+                    with Timer('Elapsed time in whole WCT: {}', config.verbose):
+                        postfix = '_'.join(sorted(list(_transfer_at)))
+                        fname_output = _output.replace(ext, '_{}_{}.{}'.format(config.option_unpool, postfix, ext))
+                        print('------ transfer:', fname)
+                        wct2 = WCT2(transfer_at=_transfer_at, option_unpool=config.option_unpool, device=device, verbose=config.verbose)
+                        with torch.no_grad():
+                            img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
+                        save_image(img.clamp_(0, 1), fname_output, padding=0)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -277,8 +269,6 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--transfer_all', action='store_true')
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--verbose', action='store_true')
-    parser.add_argument('--suppress_style', action='store_true',
-                    help='Run LL-only structural compression (no style transfer)')
     config = parser.parse_args()
 
     print(config)
