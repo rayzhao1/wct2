@@ -84,7 +84,7 @@ class WCT2:
             if skip_level in skips:
                 for i in range(3):  # LH, HL, HH
                     original = skips[skip_level][i]
-                    skips[skip_level][i] = 0
+                    skips[skip_level][i] = torch.zeros_like(original)
 
         # Decode the image (reconstruct from LL and cleared skips)
         output = self.decoder(feat, skips)
@@ -187,10 +187,11 @@ def run_bulk(config):
         _output = os.path.join(config.output, fname)
 
         content = open_image(_content, config.image_size).to(device)
-        style = open_image(_style, config.image_size).to(device) if os.path.exists(_content) else None
-        content_segment = load_segment(_content_segment, config.image_size) if os.path.exists(content_segment) else None
+        style = open_image(_style, config.image_size).to(device) if os.path.exists(_style) else None
+        content_segment = load_segment(_content_segment, config.image_size) if os.path.exists(_content_segment) else None
         style_segment = load_segment(_style_segment, config.image_size) if os.path.exists(_style_segment) else None 
         _, ext = os.path.splitext(fname)
+        ext = ext[1:]
         
         if not config.transfer_all:
             with Timer('Elapsed time in whole WCT: {}', config.verbose):
@@ -228,7 +229,7 @@ def run_bulk(config):
                 save_image(img_suppress.clamp_(0, 1), fname_suppress, padding=0)
         else:
             # Suppression mode requires only content image
-            if (content and not style and not content_segment and not style_segment):
+            if (content!=None and style==None content_segment==None and not style_segment==None):
                 with Timer('Elapsed time in suppression pass: {}', config.verbose):
                     suppress_output = _output.replace(ext, '-suppress.{}'.format(ext))
                     print('------ suppression:', fname)
@@ -242,7 +243,7 @@ def run_bulk(config):
                         img = wct2.compress_structure_only(content, alpha=config.alpha)
                     save_image(img.clamp_(0, 1), suppress_output, padding=0)
             else:
-                assert content and style and content_segment and style_segment, 'Must provide all of content/style + respective segments'
+                assert content is not None and style is not None and content_segment is not None and style_segment is not None, 'Must provide all of content/style + respective segments'
                 for _transfer_at in get_all_transfer():
                     with Timer('Elapsed time in whole WCT: {}', config.verbose):
                         postfix = '_'.join(sorted(list(_transfer_at)))
