@@ -228,26 +228,7 @@ def run_bulk(config):
 
                 save_image(img_suppress.clamp_(0, 1), fname_suppress, padding=0)
         else:
-            # Suppression mode requires only content image
-            if (content!=None and style==None and content_segment==None and style_segment==None):
-                with Timer('Elapsed time in suppression pass: {}', config.verbose):
-                    keep_ll = _output.replace(ext, '_suppress.{}'.format(ext))
-                    self_transfer = _output.replace(ext, '_suppress-wct.{}'.format(ext))
-                    print('------ suppression:', fname)
-                    wct2 = WCT2(
-                        transfer_at=set(),  # or whatever is appropriate — maybe just 'encoder'?
-                        option_unpool=config.option_unpool,
-                        device=device,
-                        verbose=config.verbose,
-                    )
-                    with torch.no_grad():
-                        img = wct2.compress_structure_only(content, alpha=config.alpha)
-
-                        compressed = wct2.transfer(content, content, None, None, alpha=0.6)
-                        both = wct2.compress_structure_only(compressed, alpha=config.alpha)
-                    save_image(img.clamp_(0, 1), keep_ll, padding=0)
-                    save_image(both.clamp_(0, 1), self_transfer, padding=0)
-            else:
+            if (content!=None and style!=None and content_segment!=None and style_segment!=None):
                 assert content is not None and style is not None and content_segment is not None and style_segment is not None, 'Must provide all of content/style + respective segments'
                 for _transfer_at in get_all_transfer():
                     with Timer('Elapsed time in whole WCT: {}', config.verbose):
@@ -258,6 +239,23 @@ def run_bulk(config):
                         with torch.no_grad():
                             img = wct2.transfer(content, style, content_segment, style_segment, alpha=config.alpha)
                         save_image(img.clamp_(0, 1), fname_output, padding=0)
+            with Timer('Elapsed time in suppression pass: {}', config.verbose):
+                keep_ll = _output.replace(ext, '_suppress.{}'.format(ext))
+                self_transfer = _output.replace(ext, '_suppress-wct.{}'.format(ext))
+                print('------ suppression:', fname)
+                wct2 = WCT2(
+                    transfer_at=set(),  # or whatever is appropriate — maybe just 'encoder'?
+                    option_unpool=config.option_unpool,
+                    device=device,
+                    verbose=config.verbose,
+                )
+                with torch.no_grad():
+                    img = wct2.compress_structure_only(content, alpha=config.alpha)
+
+                    compressed = wct2.transfer(content, content, None, None, alpha=0.6)
+                    both = wct2.compress_structure_only(compressed, alpha=config.alpha)
+                save_image(img.clamp_(0, 1), keep_ll, padding=0)
+                save_image(both.clamp_(0, 1), self_transfer, padding=0)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
