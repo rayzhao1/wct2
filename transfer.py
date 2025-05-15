@@ -229,9 +229,10 @@ def run_bulk(config):
                 save_image(img_suppress.clamp_(0, 1), fname_suppress, padding=0)
         else:
             # Suppression mode requires only content image
-            if (content!=None and style==None content_segment==None and not style_segment==None):
+            if (content!=None and style==None and content_segment==None and not style_segment==None):
                 with Timer('Elapsed time in suppression pass: {}', config.verbose):
-                    suppress_output = _output.replace(ext, '-suppress.{}'.format(ext))
+                    keep_ll = _output.replace(ext, '-suppress.{}'.format(ext))
+                    self_transfer = _output.replace(ext, '-suppress_wct.{}'.format(ext))
                     print('------ suppression:', fname)
                     wct2 = WCT2(
                         transfer_at=set(),  # or whatever is appropriate — maybe just 'encoder'?
@@ -241,7 +242,9 @@ def run_bulk(config):
                     )
                     with torch.no_grad():
                         img = wct2.compress_structure_only(content, alpha=config.alpha)
-                    save_image(img.clamp_(0, 1), suppress_output, padding=0)
+                        compressed = wct2.transfer(content, content, None, None, alpha=0.1)
+                    save_image(img.clamp_(0, 1), keep_ll, padding=0)
+                    save_image(compressed.clamp_(0, 1), self_transfer, padding=0)
             else:
                 assert content is not None and style is not None and content_segment is not None and style_segment is not None, 'Must provide all of content/style + respective segments'
                 for _transfer_at in get_all_transfer():
