@@ -231,8 +231,8 @@ def run_bulk(config):
             # Suppression mode requires only content image
             if (content!=None and style==None and content_segment==None and style_segment==None):
                 with Timer('Elapsed time in suppression pass: {}', config.verbose):
-                    keep_ll = _output.replace(ext, '-suppress.{}'.format(ext))
-                    self_transfer = _output.replace(ext, '-suppress_wct.{}'.format(ext))
+                    keep_ll = _output.replace(ext, '_suppress.{}'.format(ext))
+                    self_transfer = _output.replace(ext, '_suppress-wct.{}'.format(ext))
                     print('------ suppression:', fname)
                     wct2 = WCT2(
                         transfer_at=set(),  # or whatever is appropriate — maybe just 'encoder'?
