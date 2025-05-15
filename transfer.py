@@ -228,7 +228,7 @@ def run_bulk(config):
 
                 save_image(img_suppress.clamp_(0, 1), fname_suppress, padding=0)
         else:
-            if (content!=None and style!=None and content_segment!=None and style_segment!=None):
+            if (content is not None and style is not None and content_segment is not None and style_segment is not None):
                 assert content is not None and style is not None and content_segment is not None and style_segment is not None, 'Must provide all of content/style + respective segments'
                 for _transfer_at in get_all_transfer():
                     with Timer('Elapsed time in whole WCT: {}', config.verbose):
@@ -252,7 +252,7 @@ def run_bulk(config):
                 with torch.no_grad():
                     img = wct2.compress_structure_only(content, alpha=config.alpha)
 
-                    compressed = wct2.transfer(content, content, None, None, alpha=0.6)
+                    compressed = wct2.transfer(content, content, None, None, alpha=0.1)
                     both = wct2.compress_structure_only(compressed, alpha=config.alpha)
                 save_image(img.clamp_(0, 1), keep_ll, padding=0)
                 save_image(both.clamp_(0, 1), self_transfer, padding=0)
