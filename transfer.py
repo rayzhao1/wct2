@@ -229,7 +229,7 @@ def run_bulk(config):
                 save_image(img_suppress.clamp_(0, 1), fname_suppress, padding=0)
         else:
             # Suppression mode requires only content image
-            if (content!=None and style==None and content_segment==None and not style_segment==None):
+            if (content!=None and style==None and content_segment==None and style_segment==None):
                 with Timer('Elapsed time in suppression pass: {}', config.verbose):
                     keep_ll = _output.replace(ext, '-suppress.{}'.format(ext))
                     self_transfer = _output.replace(ext, '-suppress_wct.{}'.format(ext))

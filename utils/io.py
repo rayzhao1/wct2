@@ -90,7 +90,7 @@ def load_segment(image_path, image_size=None):
 
 
 def compute_label_info(content_segment, style_segment):
-    if not content_segment.size or not style_segment.size:
+    if (not content_segment and not style_segment) or not content_segment.size or not style_segment.size:
         return None, None
     max_label = np.max(content_segment) + 1
     label_set = np.unique(content_segment)
